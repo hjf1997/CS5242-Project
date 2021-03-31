@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', type=str, default='model',
                         help='name of the experiment. It decides where to store samples and models')
     parser.add_argument('--n_epochs', type=int, default=10000)
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--batch_size', type=int, default=12)
     parser.add_argument('--print_freq', type=int, default=50, help='frequency of showing training results on console')
     parser.add_argument('--continue_train', action='store_true', help='continue training: load the latest model')
     parser.add_argument('--load_iter', type=int, default='0',
@@ -21,9 +21,9 @@ if __name__ == '__main__':
                         help='which epoch to load? set to latest to use latest cached model')
     parser.add_argument('--save_latest_freq', type=int, default=10000, help='frequency of saving the latest results')
     parser.add_argument('--save_by_iter', action='store_true', help='whether saves model by iteration')
-    parser.add_argument('--save_epoch_freq', type=int, default=5,
+    parser.add_argument('--save_epoch_freq', type=int, default=10,
                         help='frequency of saving checkpoints at the end of epochs')
-    parser.add_argument('--test_epoch_freq', type=int, default=20,
+    parser.add_argument('--test_epoch_freq', type=int, default=10,
                         help='frequency of saving checkpoints at the end of epochs')
     parser.add_argument('--n_threads', type=int, default=6)
     parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')

@@ -5,7 +5,7 @@ import random
 import torch
 import torchvision
 from torch.nn import init
-from models.network import Lstm, Vgg
+from models.network import Lstm, Vgg, VggCla
 import torch.nn as nn
 from models.base_model import BaseModel
 from coco_name import coco_name
@@ -70,17 +70,17 @@ class Model(BaseModel):
         super().__init__(opt)
         self.gpu_ids = opt.gpu_ids
         self.model_names = ['C']
-        self.loss_names = ['object', 'relation', 'subject']
+        self.loss_names = ['object', 'relation', 'subject', 'label']
 
         self.netC = Lstm()
         self.netC = init_net(self.netC, gpu_ids=self.gpu_ids)
         if not opt.test:
             self.optm_net = torch.optim.Adam(self.netC.parameters(), lr=2e-4)
             self.loss = nn.BCEWithLogitsLoss().to(self.device)
-        else:
-            self.model_names.append('Cla')
-            self.netCla = Vgg()
-            self.netCla = init_net(self.netCla, gpu_ids=self.gpu_ids)
+        # else:
+            # self.model_names.append('Cla')
+            # self.netCla = VggCla()
+            # self.netCla = init_net(self.netCla, gpu_ids=self.gpu_ids)
 
 
     def set_input(self, input):
@@ -106,12 +106,13 @@ class Model(BaseModel):
                 total_iters += 1
 
                 self.set_input(data)
-                pred_object, pred_relation, pred_subject = self.netC(self.images)
+                pred_label, pred_object, pred_relation, pred_subject = self.netC(self.images)
 
+                self.loss_label = self.loss(pred_label, (self.object.int() | self.subject.int()).float())
                 self.loss_object = self.loss(pred_object, self.object)
                 self.loss_relation = self.loss(pred_relation, self.relation)
                 self.loss_subject = self.loss(pred_subject, self.subject)
-                loss_ = self.loss_object + self.loss_relation + self.loss_subject
+                loss_ = self.loss_object + self.loss_relation + self.loss_subject + self.loss_label
                 self.optm_net.zero_grad()
                 loss_.backward()
                 self.optm_net.step()
@@ -138,7 +139,7 @@ class Model(BaseModel):
                 for i, data in enumerate(train_loader):
                     self.set_input(data)
                     with torch.no_grad():
-                        object, relation, subject = self.netC(self.images)
+                        label, object, relation, subject = self.netC(self.images)
                     score += (self.cal_top5(object, self.object) + self.cal_top5(relation, self.relation) + self.cal_top5(subject, self.subject))/3
                     if i == 10:
                         break
@@ -159,32 +160,36 @@ class Model(BaseModel):
             self.set_input(data)
             with torch.no_grad():
                 # process object
-                _, relation, _ = self.netC(self.images)
-                object = self.netCla(self.images[:, 15])
+                label, object, relation, subject = self.netC(self.images)
+                # object = self.netCla(self.images[:, 15])
+
+                # pred_label = label.topk(5, sorted=True)[1].cpu().tolist()[0]
+                # csv_write.writerow([count, " ".join([str(x) for x in pred_label])])
+                # count += 1
+
                 pred_object = object.topk(5, sorted=True)[1].cpu().tolist()[0]
-
-                di_os = {0: 0,
-                      1: 0,
-                      2: 0}
-                for key, value in ann.items():
-                    if value[0] == pred_object[0] and value[2] == pred_object[1]:
-                        di_os[0] += 1  # 正向
-                    elif value[2] == pred_object[0] and value[0] == pred_object[1]:
-                        di_os[1] += 1  # 反向
-                    elif value[0] == pred_object[0] and value[2] == pred_object[0]:
-                        di_os[2] += 1  # 不变
-                max_ = 0
-                for key, value in di_os.items():
-                    if value >= max_:
-                        val = key
-                        max_ = value
-                # 防止列表中没有出现
-                if max_ == 0:
-                    print(i)
-                    val = -1
-
-                if val == 1:
-                    pred_object[0], pred_object[1] = pred_object[1], pred_object[0]
+                # di_os = {0: 0,
+                #       1: 0,
+                #       2: 0}
+                # for key, value in ann.items():
+                #     if value[0] == pred_object[0] and value[2] == pred_object[1]:
+                #         di_os[0] += 1  # 正向
+                #     elif value[2] == pred_object[0] and value[0] == pred_object[1]:
+                #         di_os[1] += 1  # 反向
+                #     elif value[0] == pred_object[0] and value[2] == pred_object[0]:
+                #         di_os[2] += 1  # 不变
+                # max_ = 0
+                # for key, value in di_os.items():
+                #     if value >= max_:
+                #         val = key
+                #         max_ = value
+                # # 防止列表中没有出现
+                # if max_ == 0:
+                #     print(i)
+                #     val = -1
+                #
+                # if val == 1:
+                #     pred_object[0], pred_object[1] = pred_object[1], pred_object[0]
                 csv_write.writerow([count, " ".join([str(x) for x in pred_object])])
                 count += 1
 
@@ -192,11 +197,11 @@ class Model(BaseModel):
                 csv_write.writerow([count, " ".join([str(x) for x in pred_relation])])
                 count += 1
 
-                pred_subject = pred_object
-                if val == 0 or val == 1 or val == -1 and object.max() < 0.8:
-                    pred_subject[0], pred_subject[1] = pred_subject[1], pred_subject[0]
+                # pred_subject = pred_object
+                # if val == 0 or val == 1 or val == -1 and object.max() < 0.8:
+                #     pred_subject[0], pred_subject[1] = pred_subject[1], pred_subject[0]
 
-                # pred_subject = subject.topk(5, sorted=True)[1].cpu().tolist()[0]
+                pred_subject = subject.topk(5, sorted=True)[1].cpu().tolist()[0]
                 csv_write.writerow([count, " ".join([str(x) for x in pred_subject])])
                 count += 1
         out.close()
